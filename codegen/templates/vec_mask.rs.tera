@@ -12,6 +12,8 @@
         {% set simd_t = "__m128" %}
     {% elif is_wasm32 %}
         {% set simd_t = "v128" %}
+    {% elif is_coresimd %}
+        {% set simd_t = mask32x5 %}
     {% endif %}
 {% endif %}
 
@@ -28,6 +30,8 @@ use core::arch::x86::*;
 use core::arch::x86_64::*;
 {% elif is_wasm32 %}
 use core::arch::wasm32::*;
+{% elif is_coresimd %}
+use core::simd::*;
 {% endif %}
 
 {% if is_sse2 %}
@@ -106,6 +110,15 @@ impl {{ self_t }} {
                     MASK[w as usize],
                 {% endif %}
             ))
+        {% elif is_coresimd %}
+            Self(mask32x4::from_array([
+                x, y, z,
+                {% if dim == 3 %}
+                    false
+                {% elif dim == 4 %}
+                    w,
+                {% endif %}
+            ]))
         {% endif %}
     }
 
@@ -135,6 +148,12 @@ impl {{ self_t }} {
             {% elif dim == 4 %}
                 u32x4_bitmask(self.0) as u32
             {% endif %}
+        {% elif is_coresimd %}
+            {% if dim == 3 %}
+                (mask32x4_to_bitmask(self.0) & 0x7) as u32
+            {% elif dim == 4 %}
+                mask32x4_to_bitmask(self.0) as u32
+            {% endif %}
         {% endif %}
     }
 
@@ -145,18 +164,8 @@ impl {{ self_t }} {
             {% for c in components %}
                 self.{{ c }} {% if not loop.last %} || {% endif %}
             {%- endfor %}
-        {% elif is_sse2 %}
-            {% if dim == 3 %}
-                unsafe { (_mm_movemask_ps(self.0) & 0x7) != 0 }
-            {% elif dim == 4 %}
-                unsafe { _mm_movemask_ps(self.0) != 0 }
-            {% endif %}
-        {% elif is_wasm32 %}
-            {% if dim == 3 %}
-                (u32x4_bitmask(self.0) & 0x7) != 0
-            {% elif dim == 4 %}
-                u32x4_bitmask(self.0) != 0
-            {% endif %}
+        {% else %}
+            self.bitmask() != 0
         {% endif %}
     }
 
@@ -167,17 +176,11 @@ impl {{ self_t }} {
             {% for c in components %}
                 self.{{ c }} {% if not loop.last %} && {% endif %}
             {%- endfor %}
-        {% elif is_sse2 %}
+        {% else %}
             {% if dim == 3 %}
-                unsafe { (_mm_movemask_ps(self.0) & 0x7) == 0x7 }
+                self.bitmask() == 0x7
             {% elif dim == 4 %}
-                unsafe { _mm_movemask_ps(self.0) == 0xf }
-            {% endif %}
-        {% elif is_wasm32 %}
-            {% if dim == 3 %}
-                (u32x4_bitmask(self.0) & 0x7) == 0x7
-            {% elif dim == 4 %}
-                u32x4_bitmask(self.0) == 0xf
+                self.bitmask() == 0xf
             {% endif %}
         {% endif %}
     }
@@ -262,6 +265,8 @@ impl BitAnd for {{ self_t }} {
             Self(unsafe { _mm_and_ps(self.0, rhs.0) })
         {% elif is_wasm32 %}
             Self(v128_and(self.0, rhs.0))
+        {% elif is_coresimd %}
+            Self(mask32x4_bitand(self.0, rhs.0))
         {% endif %}
     }
 }
@@ -287,6 +292,8 @@ impl BitOr for {{ self_t }} {
             Self(unsafe { _mm_or_ps(self.0, rhs.0) })
         {% elif is_wasm32 %}
             Self(v128_or(self.0, rhs.0))
+        {% elif is_coresimd %}
+            Self(mask32x4_bitor(self.0, rhs.0))
         {% endif %}
     }
 }
@@ -338,6 +345,8 @@ impl Not for {{ self_t }} {
             })
         {% elif is_wasm32 %}
             Self(v128_not(self.0))
+        {% elif is_coresimd %}
+            Self(mask32x4_not(self.0))
         {% endif %}
     }
 }
