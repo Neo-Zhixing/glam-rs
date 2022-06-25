@@ -11,7 +11,7 @@
     {% elif is_wasm32 %}
         {% set simd_t = "v128" %}
     {% elif is_coresimd %}
-        {% set simd_t = f32x4 %}
+        {% set simd_t = "f32x4" %}
     {% endif %}
     {% set mask_t = "BVec" ~ dim ~ "A" %}
 {% endif %}

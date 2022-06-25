@@ -13,7 +13,7 @@
     {% elif is_wasm32 %}
         {% set simd_t = "v128" %}
     {% elif is_coresimd %}
-        {% set simd_t = mask32x5 %}
+        {% set simd_t = "mask32x4" %}
     {% endif %}
 {% endif %}
 
@@ -319,6 +319,8 @@ impl BitXor for {{ self_t }} {
             Self(unsafe { _mm_xor_ps(self.0, rhs.0) })
         {% elif is_wasm32 %}
             Self(v128_xor(self.0, rhs.0))
+        {% elif is_coresimd %}
+            Self(mask32x4_bitxor(self.0, rhs.0))
         {% endif %}
     }
 }
@@ -329,6 +331,7 @@ impl BitXorAssign for {{ self_t }} {
         *self = self.bitxor(rhs);
     }
 }
+
 impl Not for {{ self_t }} {
     type Output = Self;
     #[inline]

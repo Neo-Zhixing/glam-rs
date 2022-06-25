@@ -42,6 +42,8 @@
             {% set simd_t = "__m128" %}
         {% elif is_wasm32 %}
             {% set simd_t = "v128" %}
+        {% elif is_coresimd %}
+            {% set simd_t = "f32x4" %}
         {% endif %}
     {% endif %}
 {% endif %}
