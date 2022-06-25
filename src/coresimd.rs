@@ -41,3 +41,17 @@ pub(crate) fn dot4_into_f32x4(lhs: f32x4, rhs: f32x4) -> f32x4 {
     let dot_in_x = dot4_in_x(lhs, rhs);
     simd_swizzle!(dot_in_x, [0, 0, 0, 0])
 }
+
+#[inline(always)]
+pub(crate) fn f32x4_bitand(a: f32x4, b: f32x4) -> f32x4 {
+    let a = a.to_bits();
+    let b = b.to_bits();
+    f32x4::from_bits(a.bitand(b))
+}
+
+#[inline(always)]
+pub(crate) fn f32x4_bitxor(a: f32x4, b: f32x4) -> f32x4 {
+    let a = a.to_bits();
+    let b = b.to_bits();
+    f32x4::from_bits(a.bitxor(b))
+}
