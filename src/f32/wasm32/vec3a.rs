@@ -148,7 +148,9 @@ impl Vec3A {
 
     /// Computes the dot product of `self` and `rhs`.
     #[inline]
-    pub fn dot(self, rhs: Self) -> f32 {}
+    pub fn dot(self, rhs: Self) -> f32 {
+        dot3(self.0, rhs.0)
+    }
 
     /// Computes the cross product of `self` and `rhs`.
     #[inline]

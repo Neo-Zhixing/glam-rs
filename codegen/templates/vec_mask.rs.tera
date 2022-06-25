@@ -34,7 +34,7 @@ use core::arch::wasm32::*;
 use core::simd::*;
 {% endif %}
 
-{% if is_sse2 %}
+{% if is_sse2 or is_coresimd %}
 union UnionCast {
     a: [u32; 4],
     v: {{ self_t }}
@@ -86,7 +86,7 @@ impl {{ self_t }} {
                     {{ c }},
                 {%- endfor %}
             }
-        {% elif is_sse2 %}
+        {% elif is_sse2 or is_coresimd %}
             unsafe {
                 UnionCast { a: [
                     MASK[x as usize],
@@ -110,15 +110,6 @@ impl {{ self_t }} {
                     MASK[w as usize],
                 {% endif %}
             ))
-        {% elif is_coresimd %}
-            Self(mask32x4::from_array([
-                x, y, z,
-                {% if dim == 3 %}
-                    false
-                {% elif dim == 4 %}
-                    w,
-                {% endif %}
-            ]))
         {% endif %}
     }
 
@@ -150,9 +141,9 @@ impl {{ self_t }} {
             {% endif %}
         {% elif is_coresimd %}
             {% if dim == 3 %}
-                (mask32x4_to_bitmask(self.0) & 0x7) as u32
+                (self.0.to_bitmask() & 0x7) as u32
             {% elif dim == 4 %}
-                mask32x4_to_bitmask(self.0) as u32
+                self.0.to_bitmask() as u32
             {% endif %}
         {% endif %}
     }
@@ -266,7 +257,7 @@ impl BitAnd for {{ self_t }} {
         {% elif is_wasm32 %}
             Self(v128_and(self.0, rhs.0))
         {% elif is_coresimd %}
-            Self(mask32x4_bitand(self.0, rhs.0))
+            Self(self.0 & rhs.0)
         {% endif %}
     }
 }
@@ -293,7 +284,7 @@ impl BitOr for {{ self_t }} {
         {% elif is_wasm32 %}
             Self(v128_or(self.0, rhs.0))
         {% elif is_coresimd %}
-            Self(mask32x4_bitor(self.0, rhs.0))
+            Self(self.0 | rhs.0)
         {% endif %}
     }
 }
@@ -320,7 +311,7 @@ impl BitXor for {{ self_t }} {
         {% elif is_wasm32 %}
             Self(v128_xor(self.0, rhs.0))
         {% elif is_coresimd %}
-            Self(mask32x4_bitxor(self.0, rhs.0))
+            Self(self.0 ^ rhs.0)
         {% endif %}
     }
 }
@@ -349,7 +340,7 @@ impl Not for {{ self_t }} {
         {% elif is_wasm32 %}
             Self(v128_not(self.0))
         {% elif is_coresimd %}
-            Self(mask32x4_not(self.0))
+            Self(!self.0)
         {% endif %}
     }
 }

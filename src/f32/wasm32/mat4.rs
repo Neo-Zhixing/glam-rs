@@ -1,6 +1,6 @@
 // Generated from mat.rs.tera template. Edit the template, not the generated file.
 
-use crate::{swizzles::*, DMat4, EulerRot, Mat3, Quat, Vec3, Vec3A, Vec4};
+use crate::{swizzles::*, wasm32::*, DMat4, EulerRot, Mat3, Quat, Vec3, Vec3A, Vec4};
 #[cfg(not(target_arch = "spirv"))]
 use core::fmt;
 use core::iter::{Product, Sum};
@@ -586,7 +586,7 @@ impl Mat4 {
         let addres = f32x4_add(subres, mulfacc);
         let detcof = f32x4_mul(addres, f32x4(1.0, -1.0, 1.0, -1.0));
 
-        crate::wasm32::dot4(self.x_axis.0, detcof)
+        dot4(self.x_axis.0, detcof)
     }
 
     /// Returns the inverse of `self`.
@@ -724,7 +724,7 @@ impl Mat4 {
         let row1 = i32x4_shuffle::<0, 0, 4, 4>(inv2, inv3);
         let row2 = i32x4_shuffle::<0, 2, 4, 6>(row0, row1);
 
-        let dot0 = crate::wasm32::dot4(self.x_axis.0, row2);
+        let dot0 = dot4(self.x_axis.0, row2);
         glam_assert!(dot0 != 0.0);
 
         let rcp0 = f32x4_splat(dot0.recip());

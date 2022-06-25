@@ -490,10 +490,10 @@ impl {{ self_t }} {
         {% if is_scalar %}
             Self { x: -self.x, y: -self.y, z: -self.z, w: self.w }
         {% elif is_sse2 %}
-            const SIGN: __m128 = sse2::m128_from_f32x4([-0.0, -0.0, -0.0, 0.0]);
+            const SIGN: __m128 = m128_from_f32x4([-0.0, -0.0, -0.0, 0.0]);
             Self(unsafe { _mm_xor_ps(self.0, SIGN) })
         {% elif is_wasm32 %}
-            const SIGN: v128 = wasm32::v128_from_f32x4([-1.0, -1.0, -1.0, 1.0]);
+            const SIGN: v128 = v128_from_f32x4([-1.0, -1.0, -1.0, 1.0]);
             Self(f32x4_mul(self.0, SIGN))
         {% elif is_coresimd %}
             const SIGN: f32x4 = f32x4::from_array([-1.0, -1.0, -1.0, 1.0]);
@@ -653,7 +653,7 @@ impl {{ self_t }} {
             let interpolated = start.add(end.mul(bias).sub(start).mul(s));
             interpolated.normalize()
         {% elif is_sse2 %}
-            const NEG_ZERO: __m128 = sse2::m128_from_f32x4([-0.0; 4]);
+            const NEG_ZERO: __m128 = m128_from_f32x4([-0.0; 4]);
             let start = self.0;
             let end = end.0;
             unsafe {
@@ -668,7 +668,7 @@ impl {{ self_t }} {
                 {{ self_t }}(interpolated).normalize()
             }
         {% elif is_wasm32 %}
-            const NEG_ZERO: v128 = wasm32::v128_from_f32x4([-0.0; 4]);
+            const NEG_ZERO: v128 = v128_from_f32x4([-0.0; 4]);
             let start = self.0;
             let end = end.0;
             let dot = dot4_into_v128(start, end);
@@ -684,7 +684,7 @@ impl {{ self_t }} {
             const NEG_ZERO: f32x4 = f32x4::from_array([-0.0; 4]);
             let start = self.0;
             let end = end.0;
-            let dot = dot_into_vec(start, end);
+            let dot = dot4_into_f32x4(start, end);
             // Calculate the bias, if the dot product is positive or zero, there is no bias
             // but if it is negative, we want to flip the 'end' rotation XYZW components
             let bias = f32x4_bitand(dot, NEG_ZERO);
@@ -742,7 +742,7 @@ impl {{ self_t }} {
 
                 unsafe {
                     let tmp = _mm_mul_ps(_mm_set_ps1(theta), _mm_set_ps(0.0, z, y, x));
-                    let tmp = sse2::m128_sin(tmp);
+                    let tmp = m128_sin(tmp);
 
                     let scale1 = _mm_shuffle_ps(tmp, tmp, 0b00_00_00_00);
                     let scale2 = _mm_shuffle_ps(tmp, tmp, 0b01_01_01_01);
@@ -786,7 +786,7 @@ impl {{ self_t }} {
                 let scale2 = simd_swizzle!(tmp, [1, 1, 1, 1]);
                 let theta_sin = simd_swizzle!(tmp, [2, 2, 2, 2]);
 
-                Self(self.0.mul(scale1).add(end.mul(scale2)).div(theta_sin))
+                Self(self.0.mul(scale1).add(end.0.mul(scale2)).div(theta_sin))
             {% endif %}
         }
     }
@@ -836,9 +836,9 @@ impl {{ self_t }} {
             )
         {% elif is_sse2 %}
             // Based on https://github.com/nfrechette/rtm `rtm::quat_mul`
-            const CONTROL_WZYX: __m128 = sse2::m128_from_f32x4([1.0, -1.0, 1.0, -1.0]);
-            const CONTROL_ZWXY: __m128 = sse2::m128_from_f32x4([1.0, 1.0, -1.0, -1.0]);
-            const CONTROL_YXWZ: __m128 = sse2::m128_from_f32x4([-1.0, 1.0, 1.0, -1.0]);
+            const CONTROL_WZYX: __m128 = m128_from_f32x4([1.0, -1.0, 1.0, -1.0]);
+            const CONTROL_ZWXY: __m128 = m128_from_f32x4([1.0, 1.0, -1.0, -1.0]);
+            const CONTROL_YXWZ: __m128 = m128_from_f32x4([-1.0, 1.0, 1.0, -1.0]);
 
             let lhs = self.0;
             let rhs = rhs.0;
@@ -874,9 +874,9 @@ impl {{ self_t }} {
             let lhs = self.0;
             let rhs = rhs.0;
 
-            const CONTROL_WZYX: v128 = wasm32::v128_from_f32x4([1.0, -1.0, 1.0, -1.0]);
-            const CONTROL_ZWXY: v128 = wasm32::v128_from_f32x4([1.0, 1.0, -1.0, -1.0]);
-            const CONTROL_YXWZ: v128 = wasm32::v128_from_f32x4([-1.0, 1.0, 1.0, -1.0]);
+            const CONTROL_WZYX: v128 = v128_from_f32x4([1.0, -1.0, 1.0, -1.0]);
+            const CONTROL_ZWXY: v128 = v128_from_f32x4([1.0, 1.0, -1.0, -1.0]);
+            const CONTROL_YXWZ: v128 = v128_from_f32x4([-1.0, 1.0, 1.0, -1.0]);
 
             let r_xxxx = i32x4_shuffle::<0, 0, 4, 4>(lhs, lhs);
             let r_yyyy = i32x4_shuffle::<1, 1, 5, 5>(lhs, lhs);
@@ -916,25 +916,25 @@ impl {{ self_t }} {
             let r_zzzz = simd_swizzle!(lhs, [2, 2, 2, 2]);
             let r_wwww = simd_swizzle!(lhs, [3, 3, 3, 3]);
 
-            let lxrw_lyrw_lzrw_lwrw = f32x4_mul(r_wwww, rhs);
+            let lxrw_lyrw_lzrw_lwrw = r_wwww * rhs;
             let l_wzyx = simd_swizzle!(rhs, [3, 2, 1, 0]);
 
-            let lwrx_lzrx_lyrx_lxrx = f32x4_mul(r_xxxx, l_wzyx);
+            let lwrx_lzrx_lyrx_lxrx = r_xxxx * l_wzyx;
             let l_zwxy = simd_swizzle!(l_wzyx, [1, 0, 3, 2]);
 
-            let lwrx_nlzrx_lyrx_nlxrx = f32x4_mul(lwrx_lzrx_lyrx_lxrx, CONTROL_WZYX);
+            let lwrx_nlzrx_lyrx_nlxrx = lwrx_lzrx_lyrx_lxrx * CONTROL_WZYX;
 
-            let lzry_lwry_lxry_lyry = f32x4_mul(r_yyyy, l_zwxy);
+            let lzry_lwry_lxry_lyry = r_yyyy * l_zwxy;
             let l_yxwz = simd_swizzle!(l_zwxy, [3, 2, 1, 0]);
 
-            let lzry_lwry_nlxry_nlyry = f32x4_mul(lzry_lwry_lxry_lyry, CONTROL_ZWXY);
+            let lzry_lwry_nlxry_nlyry = lzry_lwry_lxry_lyry * CONTROL_ZWXY;
 
-            let lyrz_lxrz_lwrz_lzrz = f32x4_mul(r_zzzz, l_yxwz);
-            let result0 = f32x4_add(lxrw_lyrw_lzrw_lwrw, lwrx_nlzrx_lyrx_nlxrx);
+            let lyrz_lxrz_lwrz_lzrz = r_zzzz * l_yxwz;
+            let result0 = lxrw_lyrw_lzrw_lwrw + lwrx_nlzrx_lyrx_nlxrx;
 
-            let nlyrz_lxrz_lwrz_wlzrz = f32x4_mul(lyrz_lxrz_lwrz_lzrz, CONTROL_YXWZ);
-            let result1 = f32x4_add(lzry_lwry_nlxry_nlyry, nlyrz_lxrz_lwrz_wlzrz);
-            Self(result0.add(result1))
+            let nlyrz_lxrz_lwrz_wlzrz = lyrz_lxrz_lwrz_lzrz * CONTROL_YXWZ;
+            let result1 = lzry_lwry_nlxry_nlyry * nlyrz_lxrz_lwrz_wlzrz;
+            Self(result0 + result1)
         {% endif %}
     }
 
@@ -957,20 +957,20 @@ impl {{ self_t }} {
             self.mul_vec3(rhs.into()).into()
         {% elif is_sse2 %}
             unsafe {
-                const TWO: __m128 = sse2::m128_from_f32x4([2.0; 4]);
+                const TWO: __m128 = m128_from_f32x4([2.0; 4]);
                 let w = _mm_shuffle_ps(self.0, self.0, 0b11_11_11_11);
                 let b = self.0;
-                let b2 = sse2::dot3_into_m128(b, b);
+                let b2 = dot3_into_m128(b, b);
                 Vec3A(_mm_add_ps(
                     _mm_add_ps(
                         _mm_mul_ps(rhs.0, _mm_sub_ps(_mm_mul_ps(w, w), b2)),
-                        _mm_mul_ps(b, _mm_mul_ps(sse2::dot3_into_m128(rhs.0, b), TWO)),
+                        _mm_mul_ps(b, _mm_mul_ps(dot3_into_m128(rhs.0, b), TWO)),
                     ),
                     _mm_mul_ps(Vec3A(b).cross(rhs).into(), _mm_mul_ps(w, TWO)),
                 ))
             }
         {% elif is_wasm32 %}
-            const TWO: v128 = wasm32::v128_from_f32x4([2.0; 4]);
+            const TWO: v128 = v128_from_f32x4([2.0; 4]);
             let w = i32x4_shuffle::<3, 3, 7, 7>(self.0, self.0);
             let b = self.0;
             let b2 = dot3_into_v128(b, b);
@@ -985,12 +985,12 @@ impl {{ self_t }} {
             const TWO: f32x4 = f32x4::from_array([2.0; 4]);
             let w = simd_swizzle!(self.0, [3, 3, 3, 3]);
             let b = self.0;
-            let b2 = dot3_into_vec(b, b);
+            let b2 = dot3_into_f32x4(b, b);
             Vec3A(
                 rhs.0
                     .mul(w.mul(w).sub(b2))
-                    .add(b.mul(dot3_into_vec(rhs.0, b).mul(TWO)))
-                    .add(b.cross(rhs.0).mul(w.mul(TWO))),
+                    .add(b.mul(dot3_into_f32x4(rhs.0, b).mul(TWO)))
+                    .add(Vec3A(b).cross(rhs).0.mul(w.mul(TWO))),
             )
         {% endif %}
     }

@@ -6,7 +6,7 @@ use core::fmt;
 use core::iter::{Product, Sum};
 use core::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
-use core::arch::wasm32::*;
+use core::simd::{Which::*, *};
 
 #[cfg(feature = "libm")]
 #[allow(unused_imports)]
@@ -21,7 +21,7 @@ pub const fn mat2(x_axis: Vec2, y_axis: Vec2) -> Mat2 {
 /// A 2x2 column major matrix.
 #[derive(Clone, Copy)]
 #[repr(transparent)]
-pub struct Mat2(pub(crate) v128);
+pub struct Mat2(pub(crate) f32x4);
 
 impl Mat2 {
     /// A 2x2 matrix with all elements set to `0.0`.
@@ -36,13 +36,13 @@ impl Mat2 {
     #[allow(clippy::too_many_arguments)]
     #[inline(always)]
     const fn new(m00: f32, m01: f32, m10: f32, m11: f32) -> Self {
-        Self(f32x4(m00, m01, m10, m11))
+        Self(f32x4::from_array([m00, m01, m10, m11]))
     }
 
     /// Creates a 2x2 matrix from two column vectors.
     #[inline(always)]
     pub const fn from_cols(x_axis: Vec2, y_axis: Vec2) -> Self {
-        Self(f32x4(x_axis.x, x_axis.y, y_axis.x, y_axis.y))
+        Self(f32x4::from_array([x_axis.x, x_axis.y, y_axis.x, y_axis.y]))
     }
 
     /// Creates a 2x2 matrix from a `[f32; 4]` array stored in column major order.
@@ -50,7 +50,7 @@ impl Mat2 {
     /// matrix.
     #[inline]
     pub const fn from_cols_array(m: &[f32; 4]) -> Self {
-        Self::new(m[0], m[1], m[2], m[3])
+        Self(f32x4::from_array(*m))
     }
 
     /// Creates a `[f32; 4]` array storing data in column major order.
@@ -185,17 +185,17 @@ impl Mat2 {
     #[must_use]
     #[inline]
     pub fn transpose(&self) -> Self {
-        Self(i32x4_shuffle::<0, 2, 5, 7>(self.0, self.0))
+        Self(simd_swizzle!(self.0, [0, 2, 1, 3]))
     }
 
     /// Returns the determinant of `self`.
     #[inline]
     pub fn determinant(&self) -> f32 {
         let abcd = self.0;
-        let dcba = i32x4_shuffle::<3, 2, 5, 4>(abcd, abcd);
-        let prod = f32x4_mul(abcd, dcba);
-        let det = f32x4_sub(prod, i32x4_shuffle::<1, 1, 5, 5>(prod, prod));
-        f32x4_extract_lane::<0>(det)
+        let dcba = simd_swizzle!(abcd, [3, 2, 1, 0]);
+        let prod = abcd * dcba;
+        let det = prod - simd_swizzle!(prod, [1, 1, 1, 1]);
+        det[0]
     }
 
     /// Returns the inverse of `self`.
@@ -208,66 +208,64 @@ impl Mat2 {
     #[must_use]
     #[inline]
     pub fn inverse(&self) -> Self {
-        const SIGN: v128 = v128_from_f32x4([1.0, -1.0, -1.0, 1.0]);
+        const SIGN: f32x4 = f32x4::from_array([1.0, -1.0, -1.0, 1.0]);
         let abcd = self.0;
-        let dcba = i32x4_shuffle::<3, 2, 5, 4>(abcd, abcd);
-        let prod = f32x4_mul(abcd, dcba);
-        let sub = f32x4_sub(prod, i32x4_shuffle::<1, 1, 5, 5>(prod, prod));
-        let det = i32x4_shuffle::<0, 0, 4, 4>(sub, sub);
-        let tmp = f32x4_div(SIGN, det);
-        glam_assert!(Mat2(tmp).is_finite());
-        let dbca = i32x4_shuffle::<3, 1, 6, 4>(abcd, abcd);
-        Self(f32x4_mul(dbca, tmp))
+        let dcba = simd_swizzle!(abcd, [3, 2, 1, 0]);
+        let prod = abcd * dcba;
+        let sub = prod - simd_swizzle!(prod, [1, 1, 1, 1]);
+        let det = simd_swizzle!(sub, [0, 0, 0, 0]);
+        let tmp = SIGN / det;
+        glam_assert!(tmp.is_finite());
+        let dbca = simd_swizzle!(abcd, [3, 1, 2, 0]);
+        Self(dbca.mul(tmp))
     }
 
     /// Transforms a 2D vector.
     #[inline]
     pub fn mul_vec2(&self, rhs: Vec2) -> Vec2 {
-        use core::mem::MaybeUninit;
         let abcd = self.0;
-        let xxyy = f32x4(rhs.x, rhs.x, rhs.y, rhs.y);
-        let axbxcydy = f32x4_mul(abcd, xxyy);
-        let cydyaxbx = i32x4_shuffle::<2, 3, 4, 5>(axbxcydy, axbxcydy);
-        let result = f32x4_add(axbxcydy, cydyaxbx);
-        let mut out: MaybeUninit<v128> = MaybeUninit::uninit();
-        unsafe {
-            v128_store(out.as_mut_ptr(), result);
-            *(&out.assume_init() as *const v128 as *const Vec2)
-        }
+        let xxyy = f32x4::from_array([rhs.x, rhs.x, rhs.y, rhs.y]);
+        let axbxcydy = abcd.mul(xxyy);
+        let cydyaxbx = simd_swizzle!(axbxcydy, [2, 3, 0, 1]);
+        let result = axbxcydy.add(cydyaxbx);
+        unsafe { *(&result as *const f32x4 as *const Vec2) }
     }
 
     /// Multiplies two 2x2 matrices.
     #[inline]
     pub fn mul_mat2(&self, rhs: &Self) -> Self {
         let abcd = self.0;
-        let rhs = rhs.0;
-        let xxyy0 = i32x4_shuffle::<0, 0, 5, 5>(rhs, rhs);
-        let xxyy1 = i32x4_shuffle::<2, 2, 7, 7>(rhs, rhs);
-        let axbxcydy0 = f32x4_mul(abcd, xxyy0);
-        let axbxcydy1 = f32x4_mul(abcd, xxyy1);
-        let cydyaxbx0 = i32x4_shuffle::<2, 3, 4, 5>(axbxcydy0, axbxcydy0);
-        let cydyaxbx1 = i32x4_shuffle::<2, 3, 4, 5>(axbxcydy1, axbxcydy1);
-        let result0 = f32x4_add(axbxcydy0, cydyaxbx0);
-        let result1 = f32x4_add(axbxcydy1, cydyaxbx1);
-        Self(i32x4_shuffle::<0, 1, 4, 5>(result0, result1))
+        let xxyy0 = simd_swizzle!(rhs.0, [0, 0, 1, 1]);
+        let xxyy1 = simd_swizzle!(rhs.0, [2, 2, 3, 3]);
+        let axbxcydy0 = abcd * xxyy0;
+        let axbxcydy1 = abcd * xxyy1;
+        let cydyaxbx0 = simd_swizzle!(axbxcydy0, [2, 3, 0, 1]);
+        let cydyaxbx1 = simd_swizzle!(axbxcydy1, [2, 3, 0, 1]);
+        let result0 = axbxcydy0 + cydyaxbx0;
+        let result1 = axbxcydy1 + cydyaxbx1;
+        Self(simd_swizzle!(
+            result0,
+            result1,
+            [First(0), First(1), Second(0), Second(1)]
+        ))
     }
 
     /// Adds two 2x2 matrices.
     #[inline]
     pub fn add_mat2(&self, rhs: &Self) -> Self {
-        Self(f32x4_add(self.0, rhs.0))
+        Self(self.0 + rhs.0)
     }
 
     /// Subtracts two 2x2 matrices.
     #[inline]
     pub fn sub_mat2(&self, rhs: &Self) -> Self {
-        Self(f32x4_sub(self.0, rhs.0))
+        Self(self.0 - rhs.0)
     }
 
     /// Multiplies a 2x2 matrix by a scalar.
     #[inline]
     pub fn mul_scalar(&self, rhs: f32) -> Self {
-        Self(f32x4_mul(self.0, f32x4_splat(rhs)))
+        Self(self.0 * f32x4::splat(rhs))
     }
 
     /// Returns true if the absolute difference of all elements between `self` and `rhs`
@@ -332,7 +330,7 @@ impl Neg for Mat2 {
     type Output = Self;
     #[inline]
     fn neg(self) -> Self::Output {
-        Self(f32x4_neg(self.0))
+        Self(-self.0)
     }
 }
 
