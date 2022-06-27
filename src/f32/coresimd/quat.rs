@@ -539,7 +539,7 @@ impl Quat {
         // Calculate the bias, if the dot product is positive or zero, there is no bias
         // but if it is negative, we want to flip the 'end' rotation XYZW components
         let bias = f32x4_bitand(dot, NEG_ZERO);
-        let interpolated = start.add(end.mul(bias).sub(start).mul(f32x4::splat(s)));
+        let interpolated = start + ((f32x4_bitxor(end, bias) - start) * f32x4::splat(s));
         Quat(interpolated).normalize()
     }
 
@@ -646,7 +646,7 @@ impl Quat {
         let result0 = lxrw_lyrw_lzrw_lwrw + lwrx_nlzrx_lyrx_nlxrx;
 
         let nlyrz_lxrz_lwrz_wlzrz = lyrz_lxrz_lwrz_lzrz * CONTROL_YXWZ;
-        let result1 = lzry_lwry_nlxry_nlyry * nlyrz_lxrz_lwrz_wlzrz;
+        let result1 = lzry_lwry_nlxry_nlyry + nlyrz_lxrz_lwrz_wlzrz;
         Self(result0 + result1)
     }
 

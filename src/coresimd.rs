@@ -48,3 +48,10 @@ pub(crate) fn f32x4_bitand(a: f32x4, b: f32x4) -> f32x4 {
     let b = b.to_bits();
     f32x4::from_bits(a & b)
 }
+
+#[inline(always)]
+pub(crate) fn f32x4_bitxor(a: f32x4, b: f32x4) -> f32x4 {
+    let a = a.to_bits();
+    let b = b.to_bits();
+    f32x4::from_bits(a ^ b)
+}
